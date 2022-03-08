@@ -1,0 +1,19 @@
+[ExtensionOf(tableStr(InventJournalTrans))]
+final class InventJournalTrans_Extension
+{
+    public void modifiedField(FieldId _fieldId)
+    {
+        next modifiedField(_fieldId);
+
+        switch(_fieldId)
+        {
+            case fieldNum(InventJournalTrans, Vendor):
+            if(this.Vendor)
+                {
+                    this.Vendor = VendTable::find(this.Vendor).name();
+                }
+                break;
+        }
+    }
+
+}
