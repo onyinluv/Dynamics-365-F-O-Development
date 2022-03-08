@@ -1,0 +1,102 @@
+SAT - View Details - Maintain - Refresh - Move Database
+Asset Library - Database Backup - Click the most recent to download the db in the cloud hosted dev env
+On Command Line: cd "C:\Program Files\Microsoft SQL Server\150\DAC\bin"SqlPackage.exe /a:import /sf:C:\TEMP\XXXSATbackup.bacpac /tsn:localhost /tdn:AxDB_20211103 /p:CommandTimeout=1200
+
+On SQL
+use AxDB_20211103
+go
+
+CREATE USER axdeployuser FROM LOGIN axdeployuser
+EXEC sp_addrolemember 'db_owner', 'axdeployuser'
+go
+
+CREATE USER axdbadmin FROM LOGIN axdbadmin
+EXEC sp_addrolemember 'db_owner', 'axdbadmin'
+go
+
+CREATE USER axmrruntimeuser FROM LOGIN axmrruntimeuser
+EXEC sp_addrolemember 'db_datareader', 'axmrruntimeuser'
+EXEC sp_addrolemember 'db_datawriter', 'axmrruntimeuser'
+go
+
+CREATE USER axretaildatasyncuser FROM LOGIN axretaildatasyncuser
+EXEC sp_addrolemember 'DataSyncUsersRole', 'axretaildatasyncuser'
+go
+
+CREATE USER axretailruntimeuser FROM LOGIN axretailruntimeuser
+EXEC sp_addrolemember 'UsersRole', 'axretailruntimeuser'
+EXEC sp_addrolemember 'ReportUsersRole', 'axretailruntimeuser'
+go
+
+CREATE USER [NT AUTHORITY\NETWORK SERVICE] FROM LOGIN [NT AUTHORITY\NETWORK SERVICE]
+EXEC sp_addrolemember 'db_owner', 'NT AUTHORITY\NETWORK SERVICE'
+go
+
+UPDATE T1
+SET T1.storageproviderid = 0
+ , T1.accessinformation = ''
+ , T1.modifiedby = 'Admin'
+ , T1.modifieddatetime = getdate()
+FROM docuvalue T1
+WHERE T1.storageproviderid = 1 --Azure storage
+go
+
+ALTER DATABASE CURRENT SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 6 DAYS, AUTO_CLEANUP = ON)
+GO
+
+DECLARE @RFTXNAME NVARCHAR(MAX);
+DECLARE @RFTXSQL NVARCHAR(MAX);
+DECLARE retail_ftx CURSOR FOR
+SELECT OBJECT_SCHEMA_NAME(object_id) + '.' + OBJECT_NAME(object_id) fullname FROM SYS.FULLTEXT_INDEXES
+ WHERE FULLTEXT_CATALOG_ID = (SELECT TOP 1 FULLTEXT_CATALOG_ID FROM SYS.FULLTEXT_CATALOGS WHERE NAME = 'COMMERCEFULLTEXTCATALOG');
+OPEN retail_ftx;
+FETCH NEXT FROM retail_ftx INTO @RFTXNAME;
+
+BEGIN TRY
+ WHILE @@FETCH_STATUS = 0 
+ BEGIN 
+ PRINT 'Refreshing Full Text Index ' + @RFTXNAME;
+ EXEC SP_FULLTEXT_TABLE @RFTXNAME, 'activate';
+ SET @RFTXSQL = 'ALTER FULLTEXT INDEX ON ' + @RFTXNAME + ' START FULL POPULATION';
+ EXEC SP_EXECUTESQL @RFTXSQL;
+ FETCH NEXT FROM retail_ftx INTO @RFTXNAME;
+ END
+END TRY
+BEGIN CATCH
+ PRINT error_message()
+END CATCH
+
+CLOSE retail_ftx; 
+DEALLOCATE retail_ftx; 
+go
+
+ALTER DATABASE CURRENT SET RECOVERY SIMPLE;
+go
+
+DBCC SHRINKFILE(AxDB_20211103_Log, 50);
+go
+
+
+
+To switch to using the new database, you must first stop these three services (the Microsoft documentation is out of date on the service names):
+
+Management Reporter 2012 Process Service
+Microsoft Dynamics 365 for Operations – Batch Management Service
+World Wide Web Publishing Service
+ALTER DATABASE AXDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE
+GO
+
+ALTER DATABASE AXDB MODIFY NAME = AXDB_OLD
+GO
+
+ALTER DATABASE AXDB_OLD SET MULTI_USER;    
+GO
+
+ALTER DATABASE AxDB_20211103 SET SINGLE_USER WITH ROLLBACK IMMEDIATE
+GO
+
+ALTER DATABASE AxDB_20211103 MODIFY NAME = AXDB
+GO
+
+ALTER DATABASE AXDB SET MULTI_USER;    
+GO
