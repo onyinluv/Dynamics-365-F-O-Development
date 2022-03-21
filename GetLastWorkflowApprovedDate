@@ -1,0 +1,25 @@
+[SysClientCacheDataMethodAttribute(true)]
+    public display DateDisplay getLastApproverDate()
+    {
+        WorkflowTrackingCommentTable    workflowTrackingCommentTable;
+        WorkflowWorkItemTable           workflowWorkItemTable;
+        WorkflowTrackingTable           workflowTrackingTable;
+        PurchReqMostRecentComment       comment;
+        Name                            name;
+
+        select firstonly workflowWorkItemTable
+                    order by CreatedDateTime desc
+                    where   workflowWorkItemTable.RefTableId == this.TableId &&
+                            workflowWorkItemTable.RefRecId   == this.RecId &&
+                            workflowWorkItemTable.Status     == WorkflowWorkItemStatus::Completed;
+
+        workflowTrackingTable        = Workflow::findLastTrackingRecordForWorkItem(workflowWorkItemTable);
+        workflowTrackingCommentTable = WorkflowTrackingCommentTable::findTrackingId(workflowTrackingTable.TrackingId);
+
+        comment = strFmt("%1",datetime2str(DateTimeUtil::applyTimeZoneOffset(workflowTrackingCommentTable.CreatedDateTime, DateTimeUtil::getUserPreferredTimeZone()), DateFlags::FormatAll)) + ' ';
+     
+        return comment;
+    }
+
+
+Add a string field on the form and reference this method to the field.
