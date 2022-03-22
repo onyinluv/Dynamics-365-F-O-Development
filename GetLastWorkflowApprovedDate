@@ -1,25 +1,34 @@
-[SysClientCacheDataMethodAttribute(true)]
+ [SysClientCacheDataMethodAttribute(true)]
     public display DateDisplay getLastApproverDate()
     {
-        WorkflowTrackingCommentTable    workflowTrackingCommentTable;
-        WorkflowWorkItemTable           workflowWorkItemTable;
-        WorkflowTrackingTable           workflowTrackingTable;
+       
         PurchReqMostRecentComment       comment;
-        Name                            name;
+        WorkflowTrackingStatusTable workflowTrackingStatus;
+        WorkflowTrackingTable workflowTrackingTable;
+        WorkflowTrackingCommentTable workflowTrackingCommentTable;
+        UserInfo userInfo;
+        str aprroverName;
 
-        select firstonly workflowWorkItemTable
-                    order by CreatedDateTime desc
-                    where   workflowWorkItemTable.RefTableId == this.TableId &&
-                            workflowWorkItemTable.RefRecId   == this.RecId &&
-                            workflowWorkItemTable.Status     == WorkflowWorkItemStatus::Completed;
+        select firstFast RecId, User from workflowTrackingTable
+            order by RecId desc
+            join workflowTrackingCommentTable
+            where workflowTrackingCommentTable.WorkflowTrackingTable == workflowTrackingTable.RecId
+            join UserInfo
+            where UserInfo.id == WorkflowTrackingTable.User
+            exists join workflowTrackingStatus
+            where workflowTrackingTable.WorkflowTrackingStatusTable == workflowTrackingStatus.RecId
+            && workflowTrackingStatus.ContextRecId == this.RecId //PurchReqTableRecId
+        && workflowTrackingStatus.ContextTableId == tableNum(PurchReqTable) //PurchReqTable
+            && workflowTrackingTable.TrackingType == WorkflowTrackingType::Completion;
 
-        workflowTrackingTable        = Workflow::findLastTrackingRecordForWorkItem(workflowWorkItemTable);
-        workflowTrackingCommentTable = WorkflowTrackingCommentTable::findTrackingId(workflowTrackingTable.TrackingId);
-
-        comment = strFmt("%1",datetime2str(DateTimeUtil::applyTimeZoneOffset(workflowTrackingCommentTable.CreatedDateTime, DateTimeUtil::getUserPreferredTimeZone()), DateFlags::FormatAll)) + ' ';
+        if (workflowTrackingTable.RecId > 0)
+        {
+            comment = strFmt("%1",datetime2str(DateTimeUtil::applyTimeZoneOffset(workflowTrackingCommentTable.CreatedDateTime, DateTimeUtil::getUserPreferredTimeZone()), DateFlags::FormatAll)) + ' ';
+        }
      
         return comment;
     }
+
 
 
 Add a string field on the form and reference this method to the field.
